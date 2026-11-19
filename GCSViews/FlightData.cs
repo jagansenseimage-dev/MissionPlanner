@@ -242,6 +242,9 @@ namespace MissionPlanner.GCSViews
         private bool transponderNeverConnected = true;
         private bool linuxActionLayoutConfigured;
 
+        private FlightModeButtonPanel flightModeButtons;
+        private Panel flightModeHost;
+
         public FlightData()
         {
             log.Info("Ctor Start");
@@ -251,6 +254,8 @@ namespace MissionPlanner.GCSViews
             log.Info("Components Done");
 
             instance = this;
+
+            SetupFlightModeButtons();
 
             this.SubMainLeft.Panel1.ControlAdded += (sender, e) => ManageLeftPanelVisibility();
             this.SubMainLeft.Panel1.ControlRemoved += (sender, e) => ManageLeftPanelVisibility();
@@ -3415,6 +3420,77 @@ namespace MissionPlanner.GCSViews
                 int maximumWidth = Math.Max(MainH.Panel1MinSize,
                     Math.Min((MainH.Width - MainH.SplitterWidth) * 2 / 3, widthForHeight));
                 MainH.SplitterDistance = Math.Min(tableWidth + borders, maximumWidth);
+            }
+        }
+
+        /// <summary>
+        /// Actions tab: per-vehicle flight mode buttons (Multicopter, VTOL / QuadPlane,
+        /// Fixed-Wing Plane, Rover), placed under the existing action table. The original
+        /// mode combo box and Set Mode button are kept for modes not covered here.
+        /// The buttons live in their own vertically scrolling host so the existing table's
+        /// layout (and the tab's scroll behaviour) is left as it was.
+        /// </summary>
+        private void SetupFlightModeButtons()
+        {
+            flightModeButtons = new FlightModeButtonPanel
+            {
+                Name = "flightModeButtons",
+                Location = new Point(0, 0),
+            };
+
+            flightModeHost = new Panel
+            {
+                Name = "flightModeHost",
+                AutoScroll = true,
+                TabIndex = tableLayoutPanel1.TabIndex + 1,
+            };
+            flightModeHost.Controls.Add(flightModeButtons);
+            tabActions.Controls.Add(flightModeHost);
+
+            tableLayoutPanel1.SizeChanged += (sender, e) => PositionFlightModeButtons();
+            tableLayoutPanel1.LocationChanged += (sender, e) => PositionFlightModeButtons();
+            tabActions.ClientSizeChanged += (sender, e) => PositionFlightModeButtons();
+            flightModeHost.ClientSizeChanged += (sender, e) => PositionFlightModeButtons();
+            flightModeButtons.SizeChanged += (sender, e) => PositionFlightModeButtons();
+            PositionFlightModeButtons();
+        }
+
+        private bool positioningFlightModeButtons;
+
+        private void PositionFlightModeButtons()
+        {
+            if (flightModeHost == null || positioningFlightModeButtons)
+                return;
+            positioningFlightModeButtons = true;
+            try
+            {
+                // Host fills the tab below the action table. If the pane is too short for a
+                // usable area, keep a minimum height and let the tab itself scroll to it.
+                int minHostHeight = 3 * (Font.Height + 13);
+                int top = tableLayoutPanel1.Bottom + 4;
+                int hostWidth = Math.Max(120, tabActions.ClientSize.Width - tabActions.Padding.Horizontal);
+                int hostHeight = tabActions.ClientSize.Height - tabActions.Padding.Bottom - top;
+                if (hostHeight < minHostHeight)
+                {
+                    hostHeight = minHostHeight;
+                    tabActions.AutoScroll = true;
+                }
+
+                var hostBounds = new Rectangle(tableLayoutPanel1.Left, top, hostWidth, hostHeight);
+                if (flightModeHost.Bounds != hostBounds)
+                    flightModeHost.Bounds = hostBounds;
+
+                // Buttons take the full width, or leave room for the vertical scroll bar when
+                // their height (which grows as the width shrinks) will not fit.
+                int width = hostWidth;
+                if (flightModeButtons.GetPreferredHeight(width) > hostHeight)
+                    width = hostWidth - SystemInformation.VerticalScrollBarWidth;
+                if (flightModeButtons.Width != width)
+                    flightModeButtons.Width = width;
+            }
+            finally
+            {
+                positioningFlightModeButtons = false;
             }
         }
 
